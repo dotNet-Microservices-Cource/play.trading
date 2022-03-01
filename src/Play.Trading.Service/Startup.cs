@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.OpenApi.Models;
+using Play.Common.HealthChecks;
 using Play.Common.Identity;
 using Play.Common.MassTransit;
 using Play.Common.MongoDB;
@@ -58,6 +59,9 @@ namespace Play.Trading.Service
       services.AddSingleton<IUserIdProvider, UserIdProvider>()
             .AddSingleton<MessageHub>()
             .AddSignalR();
+
+      services.AddHealthChecks()
+        .AddMongoDb();
     }
 
     // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -71,10 +75,10 @@ namespace Play.Trading.Service
 
         app.UseCors(builder =>
         {
-            builder.WithOrigins(Configuration[AllowedOriginSettings])
-                .AllowAnyHeader()
-                .AllowAnyMethod()
-                .AllowCredentials();
+          builder.WithOrigins(Configuration[AllowedOriginSettings])
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
         });
       }
 
@@ -89,6 +93,7 @@ namespace Play.Trading.Service
       {
         endpoints.MapControllers();
         endpoints.MapHub<MessageHub>("/messagehub");
+        endpoints.MapPlayEconomyHealthChecks();
       });
     }
 
@@ -96,27 +101,27 @@ namespace Play.Trading.Service
     {
       services.AddMassTransit(configure =>
       {
-        configure.UsingPlayEconomyMessageBroker(Configuration ,retryConfigurator =>
+        configure.UsingPlayEconomyMessageBroker(Configuration, retryConfigurator =>
               {
-            retryConfigurator.Interval(3, TimeSpan.FromSeconds(5));
-            retryConfigurator.Ignore(typeof(UnknownItemException));
-          });
+                retryConfigurator.Interval(3, TimeSpan.FromSeconds(5));
+                retryConfigurator.Ignore(typeof(UnknownItemException));
+              });
 
         configure.AddConsumers(Assembly.GetEntryAssembly());
         configure.AddSagaStateMachine<PurchaseStateMachine, PurchaseState>(sagaConfigurator =>
               {
-            sagaConfigurator.UseInMemoryOutbox();
-          })
+                sagaConfigurator.UseInMemoryOutbox();
+              })
                   .MongoDbRepository(r =>
                   {
-                var serviceSettings = Configuration.GetSection(nameof(ServiceSettings))
-                                                         .Get<ServiceSettings>();
-                var mongoSettings = Configuration.GetSection(nameof(MongoDbSettings))
-                                                         .Get<MongoDbSettings>();
+                    var serviceSettings = Configuration.GetSection(nameof(ServiceSettings))
+                                                             .Get<ServiceSettings>();
+                    var mongoSettings = Configuration.GetSection(nameof(MongoDbSettings))
+                                                             .Get<MongoDbSettings>();
 
-                r.Connection = mongoSettings.ConnectionString;
-                r.DatabaseName = serviceSettings.ServiceName;
-              });
+                    r.Connection = mongoSettings.ConnectionString;
+                    r.DatabaseName = serviceSettings.ServiceName;
+                  });
       });
 
       var queueSettings = Configuration.GetSection(nameof(QueueSettings))
